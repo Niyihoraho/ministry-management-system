@@ -11,6 +11,9 @@ import Pagination from "@/app/components/tables/Pagination";
 import { useSidebar } from "@/app/context/SidebarContext";
 import MemberForm from "./MemberForm";
 import MemberTable from "./MemberTable";
+import SmallGroupTable from "./SmallGroupMembersTable";
+import { DenyOnly, AllowOnly } from "@/app/components/common/RoleBasedAccess";
+
 
 const typeOptions = [
   { value: "student", label: "Student" },
@@ -118,22 +121,40 @@ export default function MemberDirectoryPage() {
           >
             View Members
           </button>
-          <button
-            className={`px-3 py-1.5 rounded-xl font-medium transition-colors duration-150 focus:outline-none ${view === 'add' ? 'bg-[#232b3b] text-white' : 'text-gray-400 hover:text-white'}`}
-            onClick={() => setView('add')}
-          >
-            Add Member
-          </button>
+        <DenyOnly scopes={['smallgroup', 'alumnismallgroup']}>
+            <button
+              className={`px-3 py-1.5 rounded-xl font-medium transition-colors duration-150 focus:outline-none ${view === 'add' ? 'bg-[#232b3b] text-white' : 'text-gray-400 hover:text-white'}`}
+              onClick={() => setView('add')}
+            >
+              Add Member
+            </button>
+            </DenyOnly>
         </div>
       </div>
       {/* Responsive container: full width for table, max-w-xl for form */}
       {view === 'add' ? (
-        <div className="mx-auto w-full max-w-xl">
-          <MemberForm />
-        </div>
+        <DenyOnly scopes={['smallgroup', 'alumnismallgroup']} fallback={
+          <div className="mx-auto w-full max-w-7xl transition-all duration-300">
+            <div className="text-center py-8">
+              <p className="text-gray-400">You don't have permission to add members.</p>
+            </div>
+          </div>
+        }>
+          <div className="mx-auto w-full max-w-xl">
+            <MemberForm />
+          </div>
+        </DenyOnly>
       ) : (
         <div className="mx-auto w-full max-w-7xl transition-all duration-300">
-          <MemberTable refreshKey={refreshKey} />
+          {/* Small Group Table - Only visible to smallgroup scope users */}
+          <AllowOnly scopes="smallgroup">
+            <SmallGroupTable refreshKey={refreshKey} />
+          </AllowOnly>
+          
+          {/* Member Table - Visible to all users except smallgroup */}
+          <DenyOnly scopes="smallgroup">
+            <MemberTable refreshKey={refreshKey} />
+          </DenyOnly>
         </div>
       )}
     </div>

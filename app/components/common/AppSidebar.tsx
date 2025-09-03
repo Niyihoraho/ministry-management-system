@@ -106,48 +106,80 @@ const AppSidebar: React.FC = () => {
       {
         icon: <UserCircleIcon />,
         name: 'People Management',
-        subItems: [
-          { name: 'Member Directory', path: '/people/members', pro: false },
-          { name: 'Member Import', path: '/people/import', pro: false },
-        ],
+        subItems: (() => {
+          const baseItems = [
+            { name: 'Member Directory', path: '/people/members', pro: false }
+          ];
+          
+          // Only add Member Import for specific roles
+          if (userScopedRole === 'superadmin' || userScopedRole === 'regional' || userScopedRole === 'university' || (isLoadingRole && userRole === 'superadmin')) {
+            baseItems.push({ name: 'Member Import', path: '/people/import', pro: false });
+          }
+          
+          return baseItems;
+        })(),
       },
-  {
+        // Only show Financial Management for users with specific roles
+  ...(userScopedRole === 'superadmin'|| userScopedRole === 'national' || (isLoadingRole && userRole === 'superadmin') ? [{
     icon: <BoxCubeIcon />,
     name: 'Organization',
-    subItems: [
+    subItems: (() => {
+      const baseItems = [
       { name: 'Regions', path: '/organization/regions', pro: false },
       { name: 'Universities', path: '/organization/universities', pro: false },
       { name: 'Small Groups', path: '/organization/small-groups', pro: false },
       { name: 'Alumni Small Groups', path: '/organization/alumni-small-groups', pro: false },
-    ],
-  },
+      ];
+      return baseItems;
+    })(),
+  }] : []),
+
   {
     icon: <CalenderIcon />,
     name: 'Activities',
-    subItems: [
-      { name: 'Attendance Tracking', path: '/activities/attendance', pro: false },
+    subItems: (() => {
+      const baseItems = [
+        { name: 'Attendance Tracking', path: '/activities/attendance', pro: false },
       { name: 'Events', path: '/activities/events', pro: false },
-      { name: 'Training Programs', path: '/activities/training', pro: false },
-    ],
+      ];
+      
+      // Only add Training Programs for specific roles
+      if (userScopedRole === 'superadmin' || userScopedRole === 'regional' || userScopedRole === 'university' || (isLoadingRole && userRole === 'superadmin')) {
+        baseItems.push({ name: 'Training Programs', path: '/activities/training', pro: false });
+      }
+      
+      return baseItems;
+    })(),
   },
-  {
+  // Only show Financial Management for users with specific roles
+  ...(userScopedRole === 'superadmin'|| userScopedRole === 'national' || (isLoadingRole && userRole === 'superadmin') ? [{
     icon: <PieChartIcon />,
     name: 'Financial Management',
-    subItems: [
-      { name: 'Contributions', path: '/financial/contributions', pro: false },
-      { name: 'Budget Management', path: '/financial/budget', pro: false },
-      { name: 'Designations', path: '/financial/designations', pro: false },
-      { name: 'Financial Reports', path: '/financial/reports', pro: false },
-    ],
-  },
+    subItems: (() => {
+      const baseItems = [
+        { name: 'Contributions', path: '/financial/contributions', pro: false },
+        { name: 'Budget Management', path: '/financial/budget', pro: false },
+        { name: 'Designations', path: '/financial/designations', pro: false },
+        { name: 'Financial Reports', path: '/financial/reports', pro: false },
+      ];
+      return baseItems;
+    })(),
+  }] : []),
   {
     icon: <TableIcon />,
     name: 'Reports & Analytics',
-    subItems: [
-      { name: 'Membership Reports', path: '/reports/membership', pro: false },
-      { name: 'Financial Reports', path: '/reports/financial', pro: false },
-      { name: 'Engagement Reports', path: '/reports/engagement', pro: false },
-    ],
+    subItems: (() => {
+      const baseItems = [
+        { name: 'Engagement Reports', path: '/reports/engagement', pro: false }
+      ];
+      
+      // Only add Membership Reports and Financial Reports for specific roles
+      if (userScopedRole === 'superadmin' || userScopedRole === 'regional' || userScopedRole === 'university' || (isLoadingRole && userRole === 'superadmin')) {
+        baseItems.push({ name: 'Membership Reports', path: '/reports/membership', pro: false },
+          { name: 'Financial Reports', path: '/reports/financial', pro: false },);
+      }  
+      return baseItems;
+    })(),
   },
     ];
 
@@ -156,11 +188,14 @@ const AppSidebar: React.FC = () => {
       baseItems.push({
         icon: <PlugInIcon />,
         name: 'System Administration',
-        subItems: [
-          { name: 'User Management', path: '/admin/user-management', pro: false },
-          { name: 'Role Requests', path: '/admin/roles', pro: false },
-          { name: 'Emergency Access', path: '/admin/emergency', pro: false },
-        ],
+        subItems: (() => {
+          const baseItems = [
+            { name: 'User Management', path: '/admin/user-management', pro: false },
+            { name: 'Role Requests', path: '/admin/roles', pro: false },
+            { name: 'Emergency Access', path: '/admin/emergency', pro: false },
+          ];
+          return baseItems;
+        })(),
       });
     }
 
@@ -179,14 +214,7 @@ const AppSidebar: React.FC = () => {
     name: 'Calendar',
     path: '/calendar',
   },
-  {
-    icon: <PlugInIcon />,
-    name: 'Authentication',
-    subItems: [
-      { name: 'Sign In', path: '/signin', pro: false },
-      { name: 'Sign Up', path: '/signup', pro: false },
-    ],
-  },
+
 ];
 
   const isActive = useCallback((path: string) => path === pathname, [pathname]);
