@@ -1,13 +1,20 @@
 import { Table, TableHeader, TableRow, TableCell, TableBody } from "@/app/table";
 import React, { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
+import EditEventModal from "./EditEventModal";
+import DeleteConfirmModal from "./DeleteConfirmModal";
+import { PencilIcon, TrashIcon } from "@/app/icons";
 
 interface PermanentMinistryEvent {
   id: number;
   name: string;
   type: string;
   isActive: boolean;
+  regionId: number | null;
+  universityId: number | null;
+  smallGroupId: number | null;
+  alumniGroupId: number | null;
   region: { id: number; name: string } | null;
   university: { id: number; name: string } | null;
   smallGroup: { id: number; name: string } | null;
@@ -16,6 +23,8 @@ interface PermanentMinistryEvent {
 
 const fetchEvents = async (): Promise<PermanentMinistryEvent[]> => {
   try {
+    // The API already implements RLS filtering based on user's scope
+    // It automatically applies scope-based filtering from userrole table
     const response = await axios.get("/api/events");
     if (Array.isArray(response.data)) return response.data;
     if (Array.isArray(response.data.events)) return response.data.events;
@@ -29,7 +38,13 @@ const fetchEvents = async (): Promise<PermanentMinistryEvent[]> => {
 export default function EventTable({ refreshKey }: { refreshKey?: number }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
+  const [editingEvent, setEditingEvent] = useState<PermanentMinistryEvent | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [deletingEvent, setDeletingEvent] = useState<PermanentMinistryEvent | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const rowsPerPage = 7;
+  const queryClient = useQueryClient();
 
   const { data: events, isLoading, error, isError } = useQuery<PermanentMinistryEvent[], Error>({
     queryKey: ["permanentMinistryEvents", refreshKey],
@@ -71,6 +86,52 @@ export default function EventTable({ refreshKey }: { refreshKey?: number }) {
     setCurrentPage(1);
   };
 
+  const handleEdit = (event: PermanentMinistryEvent) => {
+    setEditingEvent(event);
+    setIsEditModalOpen(true);
+  };
+
+  const handleDelete = (event: PermanentMinistryEvent) => {
+    setDeletingEvent(event);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingEvent) return;
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/events/${deletingEvent.id}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        // Refresh the events list
+        queryClient.invalidateQueries({ queryKey: ["permanentMinistryEvents"] });
+        setIsDeleteModalOpen(false);
+        setDeletingEvent(null);
+        // You can add a success toast here if you have a toast system
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to delete event: ${errorData.error || "Unknown error"}`);
+      }
+    } catch (error) {
+      console.error("Error deleting event:", error);
+      alert("Network error. Please try again.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setIsDeleteModalOpen(false);
+    setDeletingEvent(null);
+  };
+
+  const handleEditSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ["permanentMinistryEvents"] });
+  };
+
   if (isLoading) {
     return (
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
@@ -105,6 +166,22 @@ export default function EventTable({ refreshKey }: { refreshKey?: number }) {
 
   return (
     <div className="space-y-4">
+      <EditEventModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditingEvent(null);
+        }}
+        event={editingEvent}
+        onSuccess={handleEditSuccess}
+      />
+      <DeleteConfirmModal
+        isOpen={isDeleteModalOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        eventName={deletingEvent?.name || ""}
+        isDeleting={isDeleting}
+      />
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
         {/* Search Input */}
         <div className="p-4 border-b border-gray-200 dark:border-white/[0.05]">
@@ -129,7 +206,7 @@ export default function EventTable({ refreshKey }: { refreshKey?: number }) {
         ) : (
           <>
             <div className="max-w-full overflow-x-auto">
-              <div className="min-w-[900px]">
+              <div className="min-w-[1000px]">
                 <Table>
                   <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
                     <TableRow>
@@ -141,6 +218,7 @@ export default function EventTable({ refreshKey }: { refreshKey?: number }) {
                       <TableCell isHeader className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">University</TableCell>
                       <TableCell isHeader className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Small Group</TableCell>
                       <TableCell isHeader className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Alumni Small Group</TableCell>
+                      <TableCell isHeader className="px-5 py-3 font-medium text-gray-500 text-center text-theme-xs dark:text-gray-400">Actions</TableCell>
                     </TableRow>
                   </TableHeader>
                   <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
@@ -169,6 +247,25 @@ export default function EventTable({ refreshKey }: { refreshKey?: number }) {
                         </TableCell>
                         <TableCell className="px-5 py-4 sm:px-6 text-start">
                           <span className="block font-medium text-gray-800 text-theme-sm dark:text-white/90">{event.alumniGroup?.name || "N/A"}</span>
+                        </TableCell>
+                        <TableCell className="px-5 py-4 sm:px-6 text-center">
+                          <div className="flex justify-center space-x-2">
+                            <button
+                              onClick={() => handleEdit(event)}
+                              className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/20"
+                              title="Edit event"
+                            >
+                              <PencilIcon />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(event)}
+                              disabled={isDeleting}
+                              className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
+                              title="Delete event"
+                            >
+                              <TrashIcon />
+                            </button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

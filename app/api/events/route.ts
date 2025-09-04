@@ -82,7 +82,15 @@ export async function GET(request: NextRequest) {
             },
             orderBy: { createdAt: 'desc' }
         });
-        return NextResponse.json({ events }, { status: 200 });
+        
+        // Transform the data to match the frontend interface (camelCase)
+        const transformedEvents = events.map(event => ({
+            ...event,
+            smallGroup: event.smallgroup,
+            alumniGroup: event.alumnismallgroup
+        }));
+        
+        return NextResponse.json(transformedEvents, { status: 200 });
     } catch (error) {
         console.error("Error fetching events:", error);
         return NextResponse.json({ error: 'Failed to fetch events' }, { status: 500 });
@@ -202,6 +210,8 @@ export async function POST(request: NextRequest) {
             console.error('Error applying RLS validation:', e);
             return NextResponse.json({ error: "Access denied" }, { status: 403 });
         }
+        
+        
         const newEvent = await prisma.permanentministryevent.create({
             data: {
                 name: data.name,
