@@ -7,6 +7,7 @@ import { getUserScopeFilter } from "../../utils/auth";
 export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
+        const id = searchParams.get("id");
         const regionId = searchParams.get("regionId");
         const universityId = searchParams.get("universityId");
         const smallGroupId = searchParams.get("smallGroupId");
@@ -14,6 +15,61 @@ export async function GET(request: NextRequest) {
         const type = searchParams.get("type");
         
         let where: any = {};
+        
+        // If ID is provided, return specific event
+        if (id) {
+            const event = await prisma.permanentministryevent.findUnique({
+                where: { id: Number(id) },
+                include: { 
+                    region: { select: { id: true, name: true } },
+                    university: { select: { id: true, name: true } },
+                    smallgroup: { select: { id: true, name: true } },
+                    alumnismallgroup: { select: { id: true, name: true } }
+                }
+            });
+
+            if (!event) {
+                return NextResponse.json({ error: "Event not found" }, { status: 404 });
+            }
+
+            // Apply RLS - check if user can access this event
+            const session = await auth();
+            if (session?.user?.id) {
+                try {
+                    const scopeFilter = await getUserScopeFilter(session.user.id);
+                    
+                    if (!scopeFilter.hasAccess) {
+                        return NextResponse.json({ error: "Access denied" }, { status: 403 });
+                    }
+
+                    // Check if user can access this specific event based on their scope
+                    if (scopeFilter.scope === 'region' && scopeFilter.regionId && event.regionId !== scopeFilter.regionId) {
+                        return NextResponse.json({ error: "Access denied - event not in your region" }, { status: 403 });
+                    }
+                    if (scopeFilter.scope === 'university' && scopeFilter.universityId && event.universityId !== scopeFilter.universityId) {
+                        return NextResponse.json({ error: "Access denied - event not in your university" }, { status: 403 });
+                    }
+                    if (scopeFilter.scope === 'smallgroup' && scopeFilter.smallGroupId && event.smallGroupId !== scopeFilter.smallGroupId) {
+                        return NextResponse.json({ error: "Access denied - event not in your small group" }, { status: 403 });
+                    }
+                    if (scopeFilter.scope === 'alumnismallgroup' && scopeFilter.alumniGroupId && event.alumniGroupId !== scopeFilter.alumniGroupId) {
+                        return NextResponse.json({ error: "Access denied - event not in your alumni group" }, { status: 403 });
+                    }
+                } catch (error) {
+                    console.error('Error applying RLS filter:', error);
+                    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+                }
+            }
+
+            // Transform the data to match the frontend interface (camelCase)
+            const transformedEvent = {
+                ...event,
+                smallGroup: event.smallgroup,
+                alumniGroup: event.alumnismallgroup
+            };
+
+            return NextResponse.json([transformedEvent], { status: 200 });
+        }
         
         // Apply explicit filters if provided
         if (regionId) {

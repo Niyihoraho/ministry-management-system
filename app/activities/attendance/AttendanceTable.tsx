@@ -5,6 +5,8 @@ import axios from "axios";
 import Select from "@/app/components/common/Select";
 import Label from "@/app/components/common/Label";
 import Input from "@/app/components/input/InputField";
+import CurrentScopeDisplay from "@/app/components/common/CurrentScopeDisplay";
+import SuperAdminScopeSelector from "@/app/components/common/SuperAdminScopeSelector";
 
 interface AttendanceRecord {
   id: number;
@@ -25,7 +27,9 @@ interface AttendanceRecord {
 
 const fetchAttendance = async (): Promise<AttendanceRecord[]> => {
   try {
+    console.log("Fetching attendance records...");
     const response = await axios.get("/api/attendance");
+    console.log("Attendance response:", response.data);
     if (Array.isArray(response.data)) return response.data;
     if (Array.isArray(response.data.attendance)) return response.data.attendance;
     return [];
@@ -37,7 +41,14 @@ const fetchAttendance = async (): Promise<AttendanceRecord[]> => {
 
 const formatDate = (dateString: string | undefined) => {
   if (!dateString) return "N/A";
-  return new Date(dateString).toLocaleString();
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 };
 
 const attendanceStatuses = [
@@ -61,165 +72,51 @@ export default function AttendanceTable({ refreshKey }: { refreshKey?: number })
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [regionId, setRegionId] = useState("");
-  const [regionOptions, setRegionOptions] = useState<{ value: string; label: string }[]>([]);
   const [universityId, setUniversityId] = useState("");
-  const [universityOptions, setUniversityOptions] = useState<{ value: string; label: string }[]>([]);
   const [smallGroupId, setSmallGroupId] = useState("");
-  const [smallGroupOptions, setSmallGroupOptions] = useState<{ value: string; label: string }[]>([]);
   const [alumniGroupId, setAlumniGroupId] = useState("");
-  const [alumniGroupOptions, setAlumniGroupOptions] = useState<{ value: string; label: string }[]>([]);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
+  // Handle scope changes from the scope components
+  const handleScopeChange = (scope: {
+    regionId?: string;
+    universityId?: string;
+    smallGroupId?: string;
+    alumniGroupId?: string;
+  }) => {
+    setRegionId(scope.regionId || "");
+    setUniversityId(scope.universityId || "");
+    setSmallGroupId(scope.smallGroupId || "");
+    setAlumniGroupId(scope.alumniGroupId || "");
+  };
+
+  // Check if user is super admin and fetch events
   useEffect(() => {
     // Fetch events
     fetch("/api/events")
       .then(res => res.json())
       .then(data => {
-        if (Array.isArray(data.events)) {
-          setEventOptions([{ value: "", label: "All Events" }, ...data.events.map((ev: any) => ({ value: String(ev.id), label: ev.name }))]);
+        if (Array.isArray(data)) {
+          setEventOptions([{ value: "", label: "All Events" }, ...data.map((ev: any) => ({ value: String(ev.id), label: ev.name }))]);
         }
       })
       .catch(err => {
         console.error("Failed to fetch events:", err);
       });
 
-    // Fetch regions
-    fetch("/api/regions")
+    // Check if user is super admin
+    fetch("/api/members/current-user-scope")
       .then(res => res.json())
       .then(data => {
-        if (Array.isArray(data.regions)) {
-          setRegionOptions([{ value: "", label: "All Regions" }, ...data.regions.map((r: any) => ({ value: String(r.id), label: r.name }))]);
+        if (data.scope) {
+          setIsSuperAdmin(data.scope.scope === 'superadmin');
         }
       })
       .catch(err => {
-        console.error("Failed to fetch regions:", err);
-      });
-
-    // Fetch universities
-    fetch("/api/universities")
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data.universities)) {
-          setUniversityOptions([{ value: "", label: "All Universities" }, ...data.universities.map((u: any) => ({ value: String(u.id), label: u.name }))]);
-        }
-      })
-      .catch(err => {
-        console.error("Failed to fetch universities:", err);
-      });
-
-    // Fetch small groups
-    fetch("/api/members/small-groups")
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data.smallGroups)) {
-          setSmallGroupOptions([{ value: "", label: "All Small Groups" }, ...data.smallGroups.map((sg: any) => ({ value: String(sg.id), label: sg.name }))]);
-        }
-      })
-      .catch(err => {
-        console.error("Failed to fetch small groups:", err);
-      });
-
-    // Fetch alumni groups
-    fetch("/api/members/alumni-small-groups")
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data.alumniSmallGroups)) {
-          setAlumniGroupOptions([{ value: "", label: "All Alumni Groups" }, ...data.alumniSmallGroups.map((ag: any) => ({ value: String(ag.id), label: ag.name }))]);
-        }
-      })
-      .catch(err => {
-        console.error("Failed to fetch alumni groups:", err);
+        console.error("Failed to fetch user scope:", err);
       });
   }, []);
 
-  // Cascading filter logic for universities based on region
-  useEffect(() => {
-    if (regionId) {
-      fetch(`/api/universities?regionId=${regionId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (Array.isArray(data.universities)) {
-            setUniversityOptions([{ value: "", label: "All Universities" }, ...data.universities.map((u: any) => ({ value: String(u.id), label: u.name }))]);
-          }
-        })
-        .catch(err => {
-          console.error("Failed to fetch universities for region:", err);
-        });
-      // Reset child filters when region changes
-      setUniversityId("");
-      setSmallGroupId("");
-      setAlumniGroupId("");
-    } else {
-      // Reset to all universities when no region is selected
-      fetch("/api/universities")
-        .then(res => res.json())
-        .then(data => {
-          if (Array.isArray(data.universities)) {
-            setUniversityOptions([{ value: "", label: "All Universities" }, ...data.universities.map((u: any) => ({ value: String(u.id), label: u.name }))]);
-          }
-        })
-        .catch(err => {
-          console.error("Failed to fetch universities:", err);
-        });
-    }
-  }, [regionId]);
-
-  // Cascading filter logic for small groups based on university
-  useEffect(() => {
-    if (universityId) {
-      fetch(`/api/members/small-groups?universityId=${universityId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (Array.isArray(data.smallGroups)) {
-            setSmallGroupOptions([{ value: "", label: "All Small Groups" }, ...data.smallGroups.map((sg: any) => ({ value: String(sg.id), label: sg.name }))]);
-          }
-        })
-        .catch(err => {
-          console.error("Failed to fetch small groups for university:", err);
-        });
-      // Reset child filter when university changes
-      setSmallGroupId("");
-    } else {
-      // Reset to all small groups when no university is selected
-      fetch("/api/members/small-groups")
-        .then(res => res.json())
-        .then(data => {
-          if (Array.isArray(data.smallGroups)) {
-            setSmallGroupOptions([{ value: "", label: "All Small Groups" }, ...data.smallGroups.map((sg: any) => ({ value: String(sg.id), label: sg.name }))]);
-          }
-        })
-        .catch(err => {
-          console.error("Failed to fetch small groups:", err);
-        });
-    }
-  }, [universityId]);
-
-  // Cascading filter logic for alumni groups based on region
-  useEffect(() => {
-    if (regionId) {
-      fetch(`/api/members/alumni-small-groups?regionId=${regionId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (Array.isArray(data.alumniSmallGroups)) {
-            setAlumniGroupOptions([{ value: "", label: "All Alumni Groups" }, ...data.alumniSmallGroups.map((ag: any) => ({ value: String(ag.id), label: ag.name }))]);
-          }
-        })
-        .catch(err => {
-          console.error("Failed to fetch alumni groups for region:", err);
-        });
-    } else {
-      // Reset to all alumni groups when no region is selected
-      fetch("/api/members/alumni-small-groups")
-        .then(res => res.json())
-        .then(data => {
-          if (Array.isArray(data.alumniSmallGroups)) {
-            setAlumniGroupOptions([{ value: "", label: "All Alumni Groups" }, ...data.alumniSmallGroups.map((ag: any) => ({ value: String(ag.id), label: ag.name }))]);
-          }
-        })
-        .catch(err => {
-          console.error("Failed to fetch alumni groups:", err);
-        });
-    }
-  }, [regionId]);
 
   // Fetch attendance with filters
   const { data: attendance, isLoading, error, isError, refetch } = useQuery<AttendanceRecord[], Error>({
@@ -230,12 +127,24 @@ export default function AttendanceTable({ refreshKey }: { refreshKey?: number })
       if (status && status !== "") params.append("status", status);
       if (dateFrom && dateFrom !== "") params.append("dateFrom", dateFrom);
       if (dateTo && dateTo !== "") params.append("dateTo", dateTo);
-      if (regionId && regionId !== "") params.append("regionId", regionId);
-      if (universityId && universityId !== "") params.append("universityId", universityId);
-      if (smallGroupId && smallGroupId !== "") params.append("smallGroupId", smallGroupId);
-      if (alumniGroupId && alumniGroupId !== "") params.append("alumniGroupId", alumniGroupId);
       
-      const response = await axios.get(`/api/attendance?${params.toString()}`);
+      // For Super Admin users, add explicit filters if they exist
+      // For regular users, the API will automatically apply RLS filtering
+      if (isSuperAdmin) {
+        if (regionId && regionId !== "") params.append("regionId", regionId);
+        if (universityId && universityId !== "") params.append("universityId", universityId);
+        if (smallGroupId && smallGroupId !== "") params.append("smallGroupId", smallGroupId);
+        if (alumniGroupId && alumniGroupId !== "") params.append("alumniGroupId", alumniGroupId);
+      }
+      
+      const url = `/api/attendance?${params.toString()}`;
+      console.log("AttendanceTable: Fetching from URL:", url);
+      console.log("AttendanceTable: isSuperAdmin:", isSuperAdmin);
+      
+      const response = await axios.get(url);
+      console.log("AttendanceTable: Response status:", response.status);
+      console.log("AttendanceTable: Response data:", response.data);
+      
       if (Array.isArray(response.data)) return response.data;
       if (Array.isArray(response.data.attendance)) return response.data.attendance;
       return [];
@@ -255,6 +164,21 @@ export default function AttendanceTable({ refreshKey }: { refreshKey?: number })
       (a.trainings?.name?.toLowerCase().includes(searchTerm) ?? false)
     );
   }, [attendance, searchQuery]);
+
+  // Calculate attendance statistics
+  const attendanceStats = useMemo(() => {
+    if (!filteredAttendance.length) return { total: 0, present: 0, absent: 0, excused: 0 };
+    
+    const stats = filteredAttendance.reduce((acc, record) => {
+      acc.total++;
+      if (record.status === 'present') acc.present++;
+      else if (record.status === 'absent') acc.absent++;
+      else if (record.status === 'excused') acc.excused++;
+      return acc;
+    }, { total: 0, present: 0, absent: 0, excused: 0 });
+    
+    return stats;
+  }, [filteredAttendance]);
 
   const totalPages = Math.ceil(filteredAttendance.length / rowsPerPage);
   const indexOfLastRow = currentPage * rowsPerPage;
@@ -344,6 +268,13 @@ export default function AttendanceTable({ refreshKey }: { refreshKey?: number })
 
   return (
     <div className="space-y-4">
+      {/* Show current scope or super admin selector */}
+      {isSuperAdmin ? (
+        <SuperAdminScopeSelector onScopeChange={handleScopeChange} />
+      ) : (
+        <CurrentScopeDisplay onScopeChange={handleScopeChange} />
+      )}
+      
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
         {/* Filter Controls */}
         <div className="flex flex-wrap gap-4 p-4 border-b border-gray-200 dark:border-white/[0.05] items-end">
@@ -364,7 +295,7 @@ export default function AttendanceTable({ refreshKey }: { refreshKey?: number })
             />
           </div>
           <div className="min-w-[150px]">
-            <Label htmlFor="dateFrom">From</Label>
+            <Label htmlFor="dateFrom">From Date</Label>
             <Input
               type="date"
               value={dateFrom}
@@ -372,43 +303,11 @@ export default function AttendanceTable({ refreshKey }: { refreshKey?: number })
             />
           </div>
           <div className="min-w-[150px]">
-            <Label htmlFor="dateTo">To</Label>
+            <Label htmlFor="dateTo">To Date</Label>
             <Input
               type="date"
               value={dateTo}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDateTo(e.target.value)}
-            />
-          </div>
-          <div className="min-w-[150px]">
-            <Label htmlFor="regionId">Region</Label>
-            <Select
-              options={regionOptions}
-              value={regionId}
-              onChange={setRegionId}
-            />
-          </div>
-          <div className="min-w-[150px]">
-            <Label htmlFor="universityId">University</Label>
-            <Select
-              options={universityOptions}
-              value={universityId}
-              onChange={setUniversityId}
-            />
-          </div>
-          <div className="min-w-[150px]">
-            <Label htmlFor="smallGroupId">Small Group</Label>
-            <Select
-              options={smallGroupOptions}
-              value={smallGroupId}
-              onChange={setSmallGroupId}
-            />
-          </div>
-          <div className="min-w-[150px]">
-            <Label htmlFor="alumniGroupId">Alumni Group</Label>
-            <Select
-              options={alumniGroupOptions}
-              value={alumniGroupId}
-              onChange={setAlumniGroupId}
             />
           </div>
 
@@ -443,6 +342,43 @@ export default function AttendanceTable({ refreshKey }: { refreshKey?: number })
             </button>
           </div>
         </div>
+        
+        {/* Attendance Statistics */}
+        {filteredAttendance.length > 0 && (
+          <div className="p-4 border-b border-gray-200 dark:border-white/[0.05] bg-gray-50 dark:bg-gray-800/50">
+            <div className="flex flex-wrap gap-6 items-center">
+              <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Total Records: <span className="font-bold text-gray-900 dark:text-white">{attendanceStats.total}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  Present: <span className="font-semibold text-green-600 dark:text-green-400">{attendanceStats.present}</span>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  Absent: <span className="font-semibold text-red-600 dark:text-red-400">{attendanceStats.absent}</span>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  Excused: <span className="font-semibold text-yellow-600 dark:text-yellow-400">{attendanceStats.excused}</span>
+                </span>
+              </div>
+              {attendanceStats.total > 0 && (
+                <div className="text-sm text-gray-700 dark:text-gray-300">
+                  Attendance Rate: <span className="font-semibold text-blue-600 dark:text-blue-400">
+                    {Math.round((attendanceStats.present / attendanceStats.total) * 100)}%
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        
         {editMessage && <div className="mb-4 p-2 bg-green-100 text-green-800 rounded">{editMessage}</div>}
         {editError && <div className="mb-4 p-2 bg-red-100 text-red-800 rounded">{editError}</div>}
         {/* Conditional Rendering for No Data */}

@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
                         // Regional users can only see universities in their region
                         where.regionId = scopeFilter.regionId;
                     } else if (scopeFilter.scope === 'university' && scopeFilter.universityId) {
-                        // University users can only see their specific university
+                        // University users can only see their specific university (ignore regionId filter)
                         where.id = scopeFilter.universityId;
                     } else if (scopeFilter.scope === 'smallgroup' && scopeFilter.smallGroupId) {
                         // Small group users should see universities based on their group's region

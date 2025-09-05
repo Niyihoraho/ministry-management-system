@@ -2,6 +2,8 @@ import ComponentCard from "@/app/components/common/ComponentCard";
 import Label from "@/app/components/common/Label";
 import Select from "@/app/components/common/Select";
 import Input from "@/app/components/input/InputField";
+import CurrentScopeDisplay from "@/app/components/common/CurrentScopeDisplay";
+import SuperAdminScopeSelector from "@/app/components/common/SuperAdminScopeSelector";
 import { useState, useEffect } from "react";
 
 const attendanceStatuses = [
@@ -22,81 +24,76 @@ export default function AttendanceForm({ onSuccess }: AttendanceFormProps) {
   const [universityId, setUniversityId] = useState("");
   const [smallGroupId, setSmallGroupId] = useState("");
   const [alumniGroupId, setAlumniGroupId] = useState("");
-  const [regionOptions, setRegionOptions] = useState<{ value: string; label: string }[]>([]);
-  const [allUniversities, setAllUniversities] = useState<{ id: number; name: string; regionId: number }[]>([]);
-  const [universityOptions, setUniversityOptions] = useState<{ value: string; label: string }[]>([]);
-  const [allSmallGroups, setAllSmallGroups] = useState<{ id: number; name: string; universityId: number }[]>([]);
-  const [smallGroupOptions, setSmallGroupOptions] = useState<{ value: string; label: string }[]>([]);
-  const [allAlumniGroups, setAllAlumniGroups] = useState<{ id: number; name: string; regionId: number }[]>([]);
-  const [alumniGroupOptions, setAlumniGroupOptions] = useState<{ value: string; label: string }[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<{ [memberId: string]: string }>({});
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
   const [memberError, setMemberError] = useState<string | null>(null);
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     fetch("/api/events")
       .then(res => res.json())
       .then(data => {
-        if (Array.isArray(data.events)) {
-          setEventOptions(data.events.map((ev: any) => ({ value: String(ev.id), label: ev.name })));
+        if (Array.isArray(data)) {
+          setEventOptions(data.map((ev: any) => ({ value: String(ev.id), label: ev.name })));
         }
       })
       .catch(err => {
         console.error("Failed to fetch events:", err);
       });
-    fetch("/api/regions")
+  }, []);
+
+  // Handle scope changes from the scope components
+  const handleScopeChange = (scope: {
+    regionId?: string;
+    universityId?: string;
+    smallGroupId?: string;
+    alumniGroupId?: string;
+  }) => {
+    setRegionId(scope.regionId || "");
+    setUniversityId(scope.universityId || "");
+    setSmallGroupId(scope.smallGroupId || "");
+    setAlumniGroupId(scope.alumniGroupId || "");
+  };
+
+  // Check if user is super admin
+  useEffect(() => {
+    fetch("/api/members/current-user-scope")
       .then(res => res.json())
       .then(data => {
-        if (Array.isArray(data.regions)) {
-          setRegionOptions(data.regions.map((r: { id: number; name: string }) => ({ value: String(r.id), label: r.name })));
+        if (data.scope) {
+          setIsSuperAdmin(data.scope.scope === 'superadmin');
         }
-      });
-    fetch("/api/universities")
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data.universities)) {
-          setAllUniversities(data.universities);
-        }
-      });
-            fetch("/api/members/small-groups")
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data.smallGroups)) {
-          setAllSmallGroups(data.smallGroups);
-        }
-      });
-            fetch("/api/members/alumni-small-groups")
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data.alumniSmallGroups)) {
-          setAllAlumniGroups(data.alumniSmallGroups);
-        }
+      })
+      .catch(err => {
+        console.error("Failed to fetch user scope:", err);
       });
   }, []);
 
-  // When eventId changes, fetch the event details (or find from options if already loaded)
+  // Auto-clear success message after 5 seconds
+  useEffect(() => {
+    if (submitMessage) {
+      const timer = setTimeout(() => {
+        setSubmitMessage(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [submitMessage]);
+
+  // When eventId changes, fetch the event details
   useEffect(() => {
     if (!eventId) {
       setEvent(null);
-      setRegionId("");
-      setUniversityId("");
-      setSmallGroupId("");
-      setAlumniGroupId("");
       return;
     }
     // Fetch event details
     fetch(`/api/events?id=${eventId}`)
       .then(res => res.json())
       .then(data => {
-        if (data && data.events && Array.isArray(data.events)) {
-          setEvent(data.events[0]);
-          setRegionId("");
-          setUniversityId("");
-          setSmallGroupId("");
-          setAlumniGroupId("");
+        if (Array.isArray(data) && data.length > 0) {
+          setEvent(data[0]);
         }
       })
       .catch(err => {
@@ -104,70 +101,38 @@ export default function AttendanceForm({ onSuccess }: AttendanceFormProps) {
       });
   }, [eventId]);
 
-  useEffect(() => {
-    if (regionId) {
-      const filtered = allUniversities
-        .filter(u => String(u.regionId) === regionId)
-        .map(u => ({ value: String(u.id), label: u.name }));
-      setUniversityOptions(filtered);
-      if (!filtered.some(u => u.value === universityId)) {
-        setUniversityId("");
-        setSmallGroupId("");
-        setAlumniGroupId("");
-      }
-      // Filter alumni groups by region
-      const alumniFiltered = allAlumniGroups
-        .filter(ag => String(ag.regionId) === regionId)
-        .map(ag => ({ value: String(ag.id), label: ag.name }));
-      setAlumniGroupOptions(alumniFiltered);
-      if (!alumniFiltered.some(ag => ag.value === alumniGroupId)) {
-        setAlumniGroupId("");
-      }
-    } else {
-      setUniversityOptions([]);
-      setAlumniGroupOptions([]);
-      setUniversityId("");
-      setSmallGroupId("");
-      setAlumniGroupId("");
-    }
-  }, [regionId, allUniversities, allAlumniGroups]);
-
-  useEffect(() => {
-    if (universityId) {
-      const filtered = allSmallGroups
-        .filter(sg => String(sg.universityId) === universityId)
-        .map(sg => ({ value: String(sg.id), label: sg.name }));
-      setSmallGroupOptions(filtered);
-      if (!filtered.some(sg => sg.value === smallGroupId)) {
-        setSmallGroupId("");
-      }
-    } else {
-      setSmallGroupOptions([]);
-      setSmallGroupId("");
-    }
-  }, [universityId, allSmallGroups]);
-
-  // Fetch members after all required selections
+  // Fetch members based on user's scope and event selection
   useEffect(() => {
     setMembers([]);
     setAttendance({});
     setMemberError(null);
-    if (!regionId || !universityId) return;
-    let url = "";
-    if (smallGroupId) {
-      url = `/api/members?smallGroupId=${smallGroupId}`;
-    } else if (alumniGroupId) {
-      url = `/api/members?alumniGroupId=${alumniGroupId}`;
-    } else if (event && event.smallGroupId && smallGroupId) {
-      url = `/api/members?smallGroupId=${smallGroupId}`;
-    } else if (event && event.alumniGroupId && alumniGroupId) {
-      url = `/api/members?alumniGroupId=${alumniGroupId}`;
-    } else if (universityId) {
-      url = `/api/members?universityId=${universityId}`;
-    } else if (regionId) {
-      url = `/api/members?regionId=${regionId}`;
+    
+    // Only fetch members if an event is selected
+    if (!eventId) return;
+    
+    // Build URL with scope-based filtering
+    let url = "/api/members";
+    const params = new URLSearchParams();
+    
+    // For Super Admin users, add explicit filters if they exist
+    // For regular users, the API will automatically apply RLS filtering
+    if (isSuperAdmin) {
+      if (smallGroupId) {
+        params.append("smallGroupId", smallGroupId);
+      } else if (alumniGroupId) {
+        params.append("alumniGroupId", alumniGroupId);
+      } else if (universityId) {
+        params.append("universityId", universityId);
+      } else if (regionId) {
+        params.append("regionId", regionId);
+      }
     }
-    if (!url) return;
+    
+    // If we have parameters, add them to the URL
+    if (params.toString()) {
+      url += "?" + params.toString();
+    }
+    
     setIsLoadingMembers(true);
     fetch(url)
       .then(res => res.json())
@@ -185,10 +150,11 @@ export default function AttendanceForm({ onSuccess }: AttendanceFormProps) {
         }
       })
       .catch(err => {
-        setMemberError("Failed to fetch members");
+        console.error("Failed to fetch members:", err);
+        setMemberError("Failed to load members");
       })
       .finally(() => setIsLoadingMembers(false));
-  }, [event, regionId, universityId, smallGroupId, alumniGroupId]);
+  }, [eventId, regionId, universityId, smallGroupId, alumniGroupId]);
 
   const handleAttendanceChange = (memberId: string, status: string) => {
     setAttendance(prev => ({ ...prev, [memberId]: status }));
@@ -233,12 +199,15 @@ export default function AttendanceForm({ onSuccess }: AttendanceFormProps) {
       const data = await res.json();
       
       if (res.status === 201 && data.results && data.results.every((r: any) => r.success)) {
-        setSubmitMessage("Attendance saved successfully!");
+        // Create specific success message with event name
+        const eventName = event?.name || "the selected event";
+        const memberCount = members.length;
+        setSubmitMessage(`Attendance for ${memberCount} member(s) at "${eventName}" has been saved successfully!`);
         setSubmitError(null);
-        // Clear form after successful submission
+        // Clear form after successful submission but keep user on the form
         setAttendance({});
         setMembers([]);
-        onSuccess?.();
+        // Don't call onSuccess to avoid redirecting
       } else {
         const errorMessages = data.results
           ?.filter((r: any) => !r.success)
@@ -259,67 +228,70 @@ export default function AttendanceForm({ onSuccess }: AttendanceFormProps) {
   };
 
   return (
-    <ComponentCard title="Mark Attendance">
-      <form className="space-y-6" onSubmit={handleAttendanceSubmit}>
-        <div className="flex flex-wrap gap-4 items-end mb-4">
-          <div className="flex-1 min-w-[180px]">
-            <Label htmlFor="eventId">Event *</Label>
-            <div className="relative">
-              <Select
-                options={[{ value: "", label: "-- Select Event --" }, ...eventOptions]}
-                placeholder="Select event"
-                value={eventId}
-                onChange={setEventId}
-              />
+    <div>
+      {/* Show current scope or super admin selector */}
+      {isSuperAdmin ? (
+        <SuperAdminScopeSelector onScopeChange={handleScopeChange} />
+      ) : (
+        <CurrentScopeDisplay onScopeChange={handleScopeChange} />
+      )}
+      
+      <ComponentCard title="Mark Attendance">
+        <form className="space-y-6" onSubmit={handleAttendanceSubmit}>
+          <div className="flex flex-wrap gap-4 items-end mb-4">
+            <div className="flex-1 min-w-[180px]">
+              <Label htmlFor="eventId">Event *</Label>
+              <div className="relative">
+                <Select
+                  options={[{ value: "", label: "-- Select Event --" }, ...eventOptions]}
+                  placeholder="Select event"
+                  value={eventId}
+                  onChange={setEventId}
+                />
+              </div>
             </div>
           </div>
-          <div className="flex-1 min-w-[180px]">
-            <Label htmlFor="regionId">Filter by Region</Label>
-            <div className="relative">
-              <Select
-                options={[{ value: "", label: "-- All Regions --" }, ...regionOptions]}
-                placeholder="Select region"
-                value={regionId}
-                onChange={setRegionId}
-              />
+        {submitMessage && (
+          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-green-800">{submitMessage}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSubmitMessage(null);
+                  setEventId("");
+                  setEvent(null);
+                }}
+                className="ml-4 text-sm font-medium text-green-600 hover:text-green-500 focus:outline-none focus:underline"
+              >
+                Mark Another Attendance
+              </button>
             </div>
           </div>
-          <div className="flex-1 min-w-[180px]">
-            <Label htmlFor="universityId">Filter by University</Label>
-            <div className="relative">
-              <Select
-                options={[{ value: "", label: "-- All Universities --" }, ...universityOptions]}
-                placeholder="Select university"
-                value={universityId}
-                onChange={setUniversityId}
-              />
+        )}
+        {submitError && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-red-800">{submitError}</p>
+              </div>
             </div>
           </div>
-          <div className="flex-1 min-w-[180px]">
-            <Label htmlFor="smallGroupId">Filter by Small Group</Label>
-            <div className="relative">
-              <Select
-                options={[{ value: "", label: "-- All Small Groups --" }, ...smallGroupOptions]}
-                placeholder="Select small group"
-                value={smallGroupId}
-                onChange={setSmallGroupId}
-              />
-            </div>
-          </div>
-          <div className="flex-1 min-w-[180px]">
-            <Label htmlFor="alumniGroupId">Filter by Alumni Group</Label>
-            <div className="relative">
-              <Select
-                options={[{ value: "", label: "-- All Alumni Groups --" }, ...alumniGroupOptions]}
-                placeholder="Select alumni small group"
-                value={alumniGroupId}
-                onChange={setAlumniGroupId}
-              />
-            </div>
-          </div>
-        </div>
-        {submitMessage && <div className="mb-4 p-2 bg-green-100 text-green-800 rounded">{submitMessage}</div>}
-        {submitError && <div className="mb-4 p-2 bg-red-100 text-red-800 rounded">{submitError}</div>}
+        )}
         {/* Members Attendance Table */}
         {isLoadingMembers ? (
           <div className="mt-8 p-4 bg-gray-50 border rounded text-gray-500 text-center">Loading members...</div>
@@ -387,5 +359,6 @@ export default function AttendanceForm({ onSuccess }: AttendanceFormProps) {
         )}
       </form>
     </ComponentCard>
+    </div>
   );
 } 

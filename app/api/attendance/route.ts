@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "../../../prisma/client";
 import { createAttendanceSchema } from "../validation/attendance";
 import { auth } from "../../authentication/auth";
-import { getUserScopeFilter } from "../../utils/auth";
+import { getUserScopeFilter, applyRLSFilter } from "../../utils/auth";
 
 export async function GET(request: NextRequest) {
     try {
@@ -55,35 +55,18 @@ export async function GET(request: NextRequest) {
         } else {
             // If no explicit filters, apply scope-based filtering
             const session = await auth();
+            console.log("Attendance GET: Session:", session?.user?.id);
 
             if (session?.user?.id) {
                 try {
-                    const scopeFilter = await getUserScopeFilter(session.user.id);
+                    // Apply RLS filter to member scope
+                    const memberScopeFilter = await applyRLSFilter(session.user.id, {});
+                    console.log("Attendance GET: Member scope filter:", memberScopeFilter);
                     
-                    if (!scopeFilter.hasAccess) {
-                        return NextResponse.json(
-                            { error: "Access denied" },
-                            { status: 403 }
-                        );
+                    // Apply the scope filter to the member relation
+                    if (Object.keys(memberScopeFilter).length > 0) {
+                        where.member = memberScopeFilter;
                     }
-
-                    // Apply scope-based filtering to member
-                    where.member = {};
-                    
-                    if (scopeFilter.scope === 'region' && scopeFilter.regionId) {
-                        // Regional users can only see attendance records for members in their region
-                        where.member.regionId = scopeFilter.regionId;
-                    } else if (scopeFilter.scope === 'university' && scopeFilter.universityId) {
-                        // University users can only see attendance records for members in their university
-                        where.member.universityId = scopeFilter.universityId;
-                    } else if (scopeFilter.scope === 'smallgroup' && scopeFilter.smallGroupId) {
-                        // Small group users can only see attendance records for members in their small group
-                        where.member.smallGroupId = scopeFilter.smallGroupId;
-                    } else if (scopeFilter.scope === 'alumnismallgroup' && scopeFilter.alumniGroupId) {
-                        // Alumni small group users can only see attendance records for members in their alumni group
-                        where.member.alumniGroupId = scopeFilter.alumniGroupId;
-                    }
-                    // Superadmin and national users can see all attendance records (no additional filtering)
                 } catch (error) {
                     console.error('Error applying RLS filter:', error);
                     return NextResponse.json(
@@ -91,6 +74,12 @@ export async function GET(request: NextRequest) {
                         { status: 403 }
                     );
                 }
+            } else {
+                console.log("Attendance GET: No session or user ID");
+                return NextResponse.json(
+                    { error: "Authentication required" },
+                    { status: 401 }
+                );
             }
         }
         
@@ -122,8 +111,34 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
+        
         if (!Array.isArray(body)) {
             return NextResponse.json({ error: "Expected an array of attendance records" }, { status: 400 });
+        }
+
+        // Check user access permissions
+        const session = await auth();
+        
+        if (!session?.user?.id) {
+            return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+        }
+
+        let scopeFilter;
+        try {
+            scopeFilter = await getUserScopeFilter(session.user.id);
+            
+            if (!scopeFilter.hasAccess) {
+                return NextResponse.json(
+                    { error: "Access denied" },
+                    { status: 403 }
+                );
+            }
+        } catch (error) {
+            console.error('Error checking user scope:', error);
+            return NextResponse.json(
+                { error: "Access denied" },
+                { status: 403 }
+            );
         }
 
         const results = [];
@@ -137,6 +152,43 @@ export async function POST(request: NextRequest) {
 
             const data = validation.data;
             try {
+                // Check if user has access to create attendance for this member
+                const member = await prisma.member.findUnique({
+                    where: { id: data.memberId },
+                    select: { 
+                        id: true, 
+                        regionId: true, 
+                        universityId: true, 
+                        smallGroupId: true, 
+                        alumniGroupId: true 
+                    }
+                });
+
+                if (!member) {
+                    results.push({ error: "Member not found", data: record });
+                    continue;
+                }
+
+                // Apply RLS validation - check if user can create attendance for this member
+                let hasAccess = false;
+                
+                if (['superadmin', 'national'].includes(scopeFilter.scope)) {
+                    hasAccess = true;
+                } else if (scopeFilter.scope === 'region' && scopeFilter.regionId) {
+                    hasAccess = member.regionId === scopeFilter.regionId;
+                } else if (scopeFilter.scope === 'university' && scopeFilter.universityId) {
+                    hasAccess = member.universityId === scopeFilter.universityId;
+                } else if (scopeFilter.scope === 'smallgroup' && scopeFilter.smallGroupId) {
+                    hasAccess = member.smallGroupId === scopeFilter.smallGroupId;
+                } else if (scopeFilter.scope === 'alumnismallgroup' && scopeFilter.alumniGroupId) {
+                    hasAccess = member.alumniGroupId === scopeFilter.alumniGroupId;
+                }
+
+                if (!hasAccess) {
+                    results.push({ error: "Access denied - cannot create attendance for this member", data: record });
+                    continue;
+                }
+
                 const attendanceData: any = {
                     memberId: data.memberId,
                     status: data.status,
