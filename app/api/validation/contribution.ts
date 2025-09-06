@@ -1,19 +1,12 @@
 import { z } from "zod";
 
-export const createDesignationSchema = z.object({
-    name: z.string().min(1, "Designation name is required").max(255, "Designation name cannot exceed 255 characters"),
-    description: z.string().optional(),
-    isActive: z.boolean().default(true),
-    targetAmount: z.union([
-        z.string().transform((val) => {
-            if (!val || val === "" || val === null) return null;
-            const num = Number(val);
-            return isNaN(num) ? null : num;
-        }),
-        z.number().positive(),
-        z.null(),
-    ]).optional(),
-    regionId: z.union([
+export const createContributionSchema = z.object({
+    contributorId: z.number().int().positive("Contributor ID is required"),
+    amount: z.number().positive("Amount must be positive"),
+    method: z.enum(["mobile_money", "bank_transfer", "card", "worldremit"], {
+        errorMap: () => ({ message: "Invalid payment method" })
+    }),
+    designationId: z.union([
         z.string().transform((val) => {
             if (!val || val === "" || val === null) return null;
             const num = Number(val);
@@ -22,7 +15,9 @@ export const createDesignationSchema = z.object({
         z.number().int().positive(),
         z.null(),
     ]).optional(),
-    universityId: z.union([
+    status: z.enum(["pending", "completed", "failed", "refunded", "processing", "cancelled"]).default("pending"),
+    transactionId: z.string().optional(),
+    paymentTransactionId: z.union([
         z.string().transform((val) => {
             if (!val || val === "" || val === null) return null;
             const num = Number(val);
@@ -31,7 +26,7 @@ export const createDesignationSchema = z.object({
         z.number().int().positive(),
         z.null(),
     ]).optional(),
-    smallGroupId: z.union([
+    memberId: z.union([
         z.string().transform((val) => {
             if (!val || val === "" || val === null) return null;
             const num = Number(val);
@@ -40,4 +35,4 @@ export const createDesignationSchema = z.object({
         z.number().int().positive(),
         z.null(),
     ]).optional(),
-}); 
+});

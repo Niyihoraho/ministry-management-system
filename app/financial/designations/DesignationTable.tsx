@@ -1,7 +1,10 @@
 import { Table, TableHeader, TableRow, TableCell, TableBody } from "@/app/table";
 import React, { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
+import EditDesignationModal from "./EditDesignationModal";
+import DeleteConfirmModal from "./DeleteConfirmModal";
+import { PencilIcon, TrashIcon } from "@/app/icons";
 
 interface Designation {
   id: number;
@@ -15,7 +18,7 @@ interface Designation {
   smallGroupId: number | null;
   region?: { id: number; name: string } | null;
   university?: { id: number; name: string } | null;
-  smallGroup?: { id: number; name: string } | null;
+  smallgroup?: { id: number; name: string } | null;
   createdAt: string;
 }
 
@@ -23,7 +26,6 @@ const fetchDesignations = async (): Promise<Designation[]> => {
   try {
     const response = await axios.get("/api/designations");
     if (Array.isArray(response.data)) return response.data;
-    if (Array.isArray(response.data.designations)) return response.data.designations;
     return [];
   } catch (error) {
     console.error("Error fetching designations:", error);
@@ -34,7 +36,13 @@ const fetchDesignations = async (): Promise<Designation[]> => {
 export default function DesignationTable({ refreshKey }: { refreshKey?: number }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
+  const [editingDesignation, setEditingDesignation] = useState<Designation | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [deletingDesignation, setDeletingDesignation] = useState<Designation | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const rowsPerPage = 7;
+  const queryClient = useQueryClient();
 
   const { data: designations, isLoading, error, isError } = useQuery<Designation[], Error>({
     queryKey: ["designations", refreshKey],
@@ -72,6 +80,52 @@ export default function DesignationTable({ refreshKey }: { refreshKey?: number }
     setCurrentPage(1);
   };
 
+  const handleEdit = (designation: Designation) => {
+    setEditingDesignation(designation);
+    setIsEditModalOpen(true);
+  };
+
+  const handleDelete = (designation: Designation) => {
+    setDeletingDesignation(designation);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingDesignation) return;
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/designations/${deletingDesignation.id}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        // Refresh the designations list
+        queryClient.invalidateQueries({ queryKey: ["designations"] });
+        setIsDeleteModalOpen(false);
+        setDeletingDesignation(null);
+        // You can add a success toast here if you have a toast system
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to delete designation: ${errorData.error || "Unknown error"}`);
+      }
+    } catch (error) {
+      console.error("Error deleting designation:", error);
+      alert("Network error. Please try again.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setIsDeleteModalOpen(false);
+    setDeletingDesignation(null);
+  };
+
+  const handleEditSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ["designations"] });
+  };
+
   if (isLoading) {
     return (
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
@@ -106,6 +160,22 @@ export default function DesignationTable({ refreshKey }: { refreshKey?: number }
 
   return (
     <div className="space-y-4">
+      <EditDesignationModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditingDesignation(null);
+        }}
+        designation={editingDesignation}
+        onSuccess={handleEditSuccess}
+      />
+      <DeleteConfirmModal
+        isOpen={isDeleteModalOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        designationName={deletingDesignation?.name || ""}
+        isDeleting={isDeleting}
+      />
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
         {/* Search Input */}
         <div className="p-4 border-b border-gray-200 dark:border-white/[0.05]">
@@ -130,7 +200,7 @@ export default function DesignationTable({ refreshKey }: { refreshKey?: number }
         ) : (
           <>
             <div className="max-w-full overflow-x-auto">
-              <div className="min-w-[800px]">
+              <div className="min-w-[900px]">
                 <Table>
                   <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
                     <TableRow>
@@ -139,6 +209,7 @@ export default function DesignationTable({ refreshKey }: { refreshKey?: number }
                       <TableCell isHeader className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Description</TableCell>
                       <TableCell isHeader className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Target Amount</TableCell>
                       <TableCell isHeader className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Status</TableCell>
+                      <TableCell isHeader className="px-5 py-3 font-medium text-gray-500 text-center text-theme-xs dark:text-gray-400">Actions</TableCell>
                     </TableRow>
                   </TableHeader>
                   <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
@@ -157,7 +228,7 @@ export default function DesignationTable({ refreshKey }: { refreshKey?: number }
                         </TableCell>
                         <TableCell className="px-5 py-4 sm:px-6 text-start">
                           <span className="block text-gray-600 text-theme-sm dark:text-gray-400">
-                            {designation.targetAmount ? `$${designation.targetAmount.toLocaleString()}` : "Not set"}
+                            {designation.targetAmount ? `RWF ${designation.targetAmount.toLocaleString()}` : "Not set"}
                           </span>
                         </TableCell>
                         <TableCell className="px-5 py-4 sm:px-6 text-start">
@@ -168,6 +239,25 @@ export default function DesignationTable({ refreshKey }: { refreshKey?: number }
                           }`}>
                             {designation.isActive ? 'Active' : 'Inactive'}
                           </span>
+                        </TableCell>
+                        <TableCell className="px-5 py-4 sm:px-6 text-center">
+                          <div className="flex justify-center space-x-2">
+                            <button
+                              onClick={() => handleEdit(designation)}
+                              className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/20"
+                              title="Edit designation"
+                            >
+                              <PencilIcon />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(designation)}
+                              disabled={isDeleting}
+                              className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
+                              title="Delete designation"
+                            >
+                              <TrashIcon />
+                            </button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

@@ -4,16 +4,17 @@ import { createDesignationSchema } from "../validation/designation";
 
 export async function GET(request: NextRequest) {
     try {
-        const designations = await prisma.contributionDesignation.findMany({
+        const designations = await prisma.contributiondesignation.findMany({
             include: { 
                 region: { select: { id: true, name: true } },
                 university: { select: { id: true, name: true } },
-                smallGroup: { select: { id: true, name: true } }
+                smallgroup: { select: { id: true, name: true } }
             },
             orderBy: { createdAt: 'desc' }
         });
-        return NextResponse.json({ designations }, { status: 200 });
+        return NextResponse.json(designations, { status: 200 });
     } catch (error) {
+        console.error("Error fetching designations:", error);
         return NextResponse.json({ error: 'Failed to fetch designations' }, { status: 500 });
     }
 }
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
         }
         const data = validation.data;
         
-        const newDesignation = await prisma.contributionDesignation.create({ 
+        const newDesignation = await prisma.contributiondesignation.create({ 
             data: { 
                 name: data.name,
                 description: data.description,
@@ -36,13 +37,15 @@ export async function POST(request: NextRequest) {
                 regionId: data.regionId ? Number(data.regionId) : null,
                 universityId: data.universityId ? Number(data.universityId) : null,
                 smallGroupId: data.smallGroupId ? Number(data.smallGroupId) : null,
+                updatedAt: new Date(),
             } 
         });
         return NextResponse.json(newDesignation, { status: 201 });
     } catch (error: any) {
+        console.error("Error creating designation:", error);
         if (typeof error === 'object' && error !== null && 'code' in error) {
             if (error.code === 'P2002') {
-                return NextResponse.json({ error: "Designation name or code already exists" }, { status: 409 });
+                return NextResponse.json({ error: "Designation name already exists" }, { status: 409 });
             }
             if (error.code === 'P2003') {
                 return NextResponse.json({ error: "Foreign key constraint failed (invalid region, university, or small group)" }, { status: 400 });

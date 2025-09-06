@@ -80,7 +80,7 @@ export default function DesignationForm({ onSuccess }: { onSuccess?: () => void 
             type="number" 
             value={form.targetAmount} 
             onChange={handleInputChange}
-            placeholder="e.g., 10000"
+            placeholder="e.g., 10000000 (RWF)"
           />
         </div>
         <div>

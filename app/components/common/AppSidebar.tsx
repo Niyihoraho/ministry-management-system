@@ -158,9 +158,8 @@ const AppSidebar: React.FC = () => {
     subItems: (() => {
       const baseItems = [
         { name: 'Contributions', path: '/financial/contributions', pro: false },
-        { name: 'Budget Management', path: '/financial/budget', pro: false },
+ 
         { name: 'Designations', path: '/financial/designations', pro: false },
-        { name: 'Financial Reports', path: '/financial/reports', pro: false },
       ];
       return baseItems;
     })(),
